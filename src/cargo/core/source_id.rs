@@ -536,18 +536,14 @@ impl SourceId {
     ///
     /// For paths, remove the workspace prefix so the same source will give the
     /// same hash in different locations, helping reproducible builds.
-    pub fn stable_hash<S: hash::Hasher>(self, workspace: &Path, into: &mut S) {
+    pub fn stable_hash<S: hash::Hasher>(self, workspace: &Path, sysroot: &Path, into: &mut S) {
         if self.is_path() {
-            if let Ok(p) = self
-                .inner
-                .url
-                .to_file_path()
-                .unwrap()
-                .strip_prefix(workspace)
-            {
-                self.inner.kind.hash(into);
-                p.to_str().unwrap().hash(into);
-                return;
+            for prefix in [workspace, sysroot] {
+                if let Ok(p) = self.inner.url.to_file_path().unwrap().strip_prefix(prefix) {
+                    self.inner.kind.hash(into);
+                    p.to_str().unwrap().hash(into);
+                    return;
+                }
             }
         }
         self.hash(into)
@@ -799,9 +795,14 @@ mod tests {
         #[cfg(windows)]
         let ws_root = Path::new(r"C:\\tmp\ws");
 
+        #[cfg(not(windows))]
+        let sysroot = Path::new("/tmp/sysroot");
+        #[cfg(windows)]
+        let sysroot = Path::new(r"C:\\tmp\sysroot");
+
         let gen_hash = |source_id: SourceId| {
             let mut hasher = StableHasher::new();
-            source_id.stable_hash(ws_root, &mut hasher);
+            source_id.stable_hash(ws_root, sysroot, &mut hasher);
             Hasher::finish(&hasher)
         };
 

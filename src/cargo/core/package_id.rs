@@ -175,12 +175,20 @@ impl PackageId {
 
     /// Returns a value that implements a "stable" hashable value.
     ///
-    /// Stable hashing removes the path prefix of the workspace from path
+    /// Stable hashing removes the path prefix of the workspace and sysroot from path
     /// packages. This helps with reproducible builds, since this hash is part
     /// of the symbol metadata, and we don't want the absolute path where the
     /// build is performed to affect the binary output.
-    pub fn stable_hash(self, workspace: &Path) -> PackageIdStableHash<'_> {
-        PackageIdStableHash(self, workspace)
+    pub fn stable_hash<'a>(
+        self,
+        workspace: &'a Path,
+        sysroot: &'a Path,
+    ) -> PackageIdStableHash<'a> {
+        PackageIdStableHash {
+            inner: self,
+            sysroot,
+            workspace,
+        }
     }
 
     /// Filename of the `.crate` tarball, e.g., `once_cell-1.18.0.crate`.
@@ -198,13 +206,20 @@ impl PackageId {
     }
 }
 
-pub struct PackageIdStableHash<'a>(PackageId, &'a Path);
+pub struct PackageIdStableHash<'a> {
+    inner: PackageId,
+    workspace: &'a Path,
+    sysroot: &'a Path,
+}
 
 impl<'a> Hash for PackageIdStableHash<'a> {
     fn hash<S: hash::Hasher>(&self, state: &mut S) {
-        self.0.inner.name.hash(state);
-        self.0.inner.version.hash(state);
-        self.0.inner.source_id.stable_hash(self.1, state);
+        self.inner.inner.name.hash(state);
+        self.inner.inner.version.hash(state);
+        self.inner
+            .inner
+            .source_id
+            .stable_hash(self.workspace, self.sysroot, state);
     }
 }
 

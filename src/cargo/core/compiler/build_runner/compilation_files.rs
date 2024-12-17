@@ -129,6 +129,8 @@ pub struct CompilationFiles<'a, 'gctx> {
     metas: HashMap<Unit, Metadata>,
     /// For each Unit, a list all files produced.
     outputs: HashMap<Unit, LazyCell<Arc<Vec<OutputFile>>>>,
+    /// Sysroot of the currently used compiler.
+    sysroot: PathBuf,
 }
 
 /// Info about a single file emitted by the compiler.
@@ -178,6 +180,13 @@ impl<'a, 'gctx: 'a> CompilationFiles<'a, 'gctx> {
             roots: build_runner.bcx.roots.clone(),
             metas,
             outputs,
+            sysroot: build_runner
+                .bcx
+                .target_data
+                .get_info(CompileKind::Host)
+                .unwrap()
+                .sysroot
+                .clone(),
         }
     }
 
@@ -201,7 +210,10 @@ impl<'a, 'gctx: 'a> CompilationFiles<'a, 'gctx> {
     /// Gets the short hash based only on the `PackageId`.
     /// Used for the metadata when `metadata` returns `None`.
     pub fn target_short_hash(&self, unit: &Unit) -> String {
-        let hashable = unit.pkg.package_id().stable_hash(self.ws.root());
+        let hashable = unit
+            .pkg
+            .package_id()
+            .stable_hash(self.ws.root(), &self.sysroot);
         util::short_hash(&(METADATA_VERSION, hashable))
     }
 
@@ -606,9 +618,10 @@ fn compute_metadata(
 
     // Unique metadata per (name, source, version) triple. This'll allow us
     // to pull crates from anywhere without worrying about conflicts.
+    let sysroot = &bcx.target_data.get_info(unit.kind).unwrap().sysroot;
     unit.pkg
         .package_id()
-        .stable_hash(bcx.ws.root())
+        .stable_hash(bcx.ws.root(), &sysroot)
         .hash(&mut shared_hasher);
 
     // Also mix in enabled features to our metadata. This'll ensure that
